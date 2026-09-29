@@ -1,4 +1,5 @@
 """Disposable Goose stdio adapter; all readings come from the HTTP service."""
+import argparse
 import json
 import sys
 from .api import app_html
@@ -63,3 +64,12 @@ def serve_stdio(port):
                         "error": {"code": -32601 if isinstance(error, LookupError) else -32602,
                                   "message": str(error)}}
         print(json.dumps(response), flush=True)
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Ollama Monitor MCP stdio adapter for Goose")
+    parser.add_argument("--port", type=int, default=11436, help="existing monitoring service port")
+    args = parser.parse_args()
+    if not 1 <= args.port <= 65535 or args.port == 11434:
+        parser.error("choose a monitor port in 1..65535 other than Ollama's 11434")
+    serve_stdio(args.port)

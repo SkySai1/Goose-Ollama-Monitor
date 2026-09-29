@@ -44,14 +44,16 @@ echo $! > /tmp/ollama-monitor.pid
 3. Укажите имя `ollama-monitor` и команду (с абсолютными путями):
 
    ```text
-   /absolute/path/to/python3 /absolute/path/to/GooseAppOllamaWatch/ollama-watch.py --mcp
+   /absolute/path/to/python3 /absolute/path/to/GooseAppOllamaWatch/ollama-monitor-mcp.py
    ```
 
-   Путь к Python можно узнать через `command -v python3`. Если форма разделяет executable и arguments: executable — Python, arguments — путь к скрипту и `--mcp`.
+   Путь к Python можно узнать через `command -v python3`. Если форма разделяет executable и arguments: executable — Python, единственный argument — абсолютный путь к `ollama-monitor-mcp.py`. Этот entry point всегда запускает MCP и сразу отвечает на `initialize`, даже если monitoring service выключен.
 4. Включите extension, откройте **Apps → Ollama Monitor → Launch**. Если ресурс ещё не появился, откройте новую сессию с включённым extension, затем Apps. Альтернатива: попросите Goose вызвать read-only `monitor_read`.
 5. Окно 880 × 940 изменяет размер и прокручивается при небольшой высоте.
 
 Если backend использует другой порт, добавьте такой же `--port 11437` в команду MCP extension. HTML и CSP будут сформированы для этого порта автоматически.
+
+**Если включение extension зависает:** проверьте executable и arguments. Запуск `ollama-watch.py` без `--mcp` включает HTTP-сервис, который не отвечает на MCP handshake. Goose тогда ждёт ответа до своего timeout. Используйте отдельный `ollama-monitor-mcp.py`; прежняя команда `ollama-watch.py --mcp` также поддерживается. После изменения команды выключите и снова включите extension; если текущая операция включения ещё ожидает ответа, перезапустите Goose. Для отображения метрик отдельно запустите `python3 ollama-watch.py --server`.
 
 `app/ollama-monitor.html` также содержит GooseApp JSON-LD и подходит для **Apps → Import App**. При этом extension `ollama-monitor` должен оставаться включённым: в версиях Goose, не сохраняющих CSP при импорте HTML, приложение использует `tools/call` через MCP Apps bridge. Самостоятельный MCP resource предпочтительнее импорта, поскольку явно указывает `connectDomains`. Изменять исходный код или ослаблять безопасность Goose не требуется.
 
@@ -95,6 +97,7 @@ Read-only HTTP: GET и CORS OPTIONS. Неизвестный range — 400, не�
 
 ```text
 ollama-watch.py           entry point: service, CLI, once, MCP adapter
+ollama-monitor-mcp.py     отдельный entry point для Goose, всегда MCP stdio
 ollama_monitor/
   collector.py           общий snapshot и независимый sampling loop
   ollama.py              read-only API Ollama
@@ -114,6 +117,7 @@ python3 -m unittest discover -s tests -v
 ```
 
 Проверяются VM formula/компрессия, дерево процессов/MLX/чужие runner, null/zero, варианты slots, свежесть/rotation логов, model restart, час истории, независимый sampling, CORS, Host, read-only API и MCP resource/tool.
+Отдельные subprocess-тесты проверяют initialize, notifications, discovery и ping при открытом stdin, без запущенного backend и из другого рабочего каталога: handshake не должен ждать EOF.
 
 Опциональная проверка настоящим Chrome (macOS, сервис должен работать на 11436):
 
