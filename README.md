@@ -37,6 +37,22 @@ echo $! > /tmp/ollama-monitor.pid
 
 ## Goose App через MCP
 
+### Запуск из списка Apps без чата
+
+Для Goose 1.52 выполните однократно:
+
+```bash
+python3 ollama-monitor-mcp.py --install-goose-app
+```
+
+Затем откройте **Apps → Ollama Monitor → Launch**. Если Apps уже открыт, перейдите в другой раздел и вернитесь. Чат и вызов инструмента моделью не требуются; monitoring service и extension `ollamamonitor` должны работать.
+
+Эта версия Goose фильтрует страницу Apps по встроенному расширению `apps` и скрывает обычные внешние MCP resources. Команда добавляет отдельную карточку в локальный `mcp-apps-cache`, сохраняя `ollamamonitor` первым в `mcpServers`: именно он обслуживает загрузку HTML и чтение метрик. Исходный код Goose не изменяется. После очистки cache или переустановки extension повторите команду. Для другого ключа extension используйте `--extension-name`, для другого порта — `--port`.
+
+Карточка управляется командой регистрации; кнопки Import/Export/Delete встроенного Apps рассчитаны на его собственные HTML-приложения. Чтобы убрать карточку монитора, удалите только JSON-файл, путь к которому выводит команда установки.
+
+### Подключение расширения и вызов через MCP
+
 Готовая настройка этой рабочей станции: [`goose-extension.yaml`](goose-extension.yaml). Это запись для раздела `extensions` в `~/.config/goose/config.yaml`; остальные расширения сохраняются. На другом компьютере замените абсолютные пути к Python и проекту.
 
 1. Запустите `python3 ollama-watch.py --server`. Collector работает отдельно от Goose и сохраняет историю при закрытии окна.
@@ -140,6 +156,7 @@ python3 tests/browser_smoke.py
 
 ```bash
 python3 tests/goose_smoke.py
+python3 tests/goose_smoke.py --launcher
 ```
 
 Она вызывает `open_monitor` через MCP-клиент Goose, проверяет metadata ресурса/окна, открывает приложение, проверяет `ONLINE` и диапазоны. Скриншот: `/tmp/ollama-monitor-goose.png`. Используется renderer SDK установленной Goose 1.52; при обновлении внутреннего SDK тесту может потребоваться адаптация, runtime приложения от него не зависит.

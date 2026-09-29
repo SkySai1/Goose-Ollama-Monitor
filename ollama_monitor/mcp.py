@@ -85,7 +85,13 @@ def serve_stdio(port):
 def main():
     parser = argparse.ArgumentParser(description="Ollama Monitor MCP stdio adapter for Goose")
     parser.add_argument("--port", type=int, default=11436, help="existing monitoring service port")
+    parser.add_argument("--install-goose-app", action="store_true", help="register a card in Goose Apps and exit")
+    parser.add_argument("--extension-name", default="ollamamonitor", help="Goose extension key for the launch card")
     args = parser.parse_args()
     if not 1 <= args.port <= 65535 or args.port == 11434:
         parser.error("choose a monitor port in 1..65535 other than Ollama's 11434")
+    if args.install_goose_app:
+        from .goose import install_launcher
+        print(install_launcher(args.port, args.extension_name))
+        return
     serve_stdio(args.port)
