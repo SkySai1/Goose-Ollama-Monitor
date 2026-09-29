@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ollama Monitor</title>
+<script type="application/ld+json">
+{"@context":"urn:goose.ai:schema","@type":"GooseApp","name":"ollama-monitor","description":"Local Ollama memory and context history","width":880,"height":940,"resizable":true,"mcpServers":["ollama-monitor"]}
+</script>
+<style>
+:root{color-scheme:dark;--bg:#111619;--panel:#192024;--line:#2b353c;--muted:#a2adb5;--text:#edf2f4;--green:#64d7b0;--purple:#b5a0ff;--amber:#e8be72;--blue:#75bdf5}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-variant-numeric:tabular-nums}main{max-width:1120px;margin:auto;padding:26px 32px 20px}header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:18px}.brand{display:flex;align-items:center;gap:12px}.mark{width:36px;height:36px;border-radius:11px;background:#233a34;color:var(--green);display:grid;place-items:center;font-size:23px}h1{font-size:21px;letter-spacing:-.5px;margin:0;font-weight:600}.eyebrow{font-size:10px;letter-spacing:1.8px;color:var(--muted);margin-top:5px}.live{color:var(--green);font-size:11px;letter-spacing:1px}.live::before{content:"";display:inline-block;width:6px;height:6px;margin-right:7px;border-radius:50%;background:currentColor}.status{display:flex;gap:18px;flex-wrap:wrap;border-block:1px solid var(--line);padding:13px 0;color:var(--muted);font-size:12px}.status strong{font-weight:500;color:var(--text);margin-left:6px}.model-row{display:flex;justify-content:space-between;align-items:center;gap:16px;margin:19px 0}.model-name{font-size:13px;overflow-wrap:anywhere}.subtle{color:var(--muted);font-size:11px;margin-top:5px}.ranges{display:flex;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:3px;flex-shrink:0}.ranges button{font:inherit;font-size:12px;color:var(--muted);border:0;background:none;padding:7px 12px;border-radius:5px;cursor:pointer}.ranges button[aria-pressed=true]{background:#36454c;color:white}.ranges button:focus-visible,canvas:focus-visible{outline:2px solid var(--green);outline-offset:3px}.banner{padding:11px 13px;background:#3b2d20;border:1px solid #735832;color:#f1d3a7;border-radius:8px;font-size:12px;margin-bottom:14px}.card{border:1px solid var(--line);background:var(--panel);border-radius:12px;padding:16px 18px 7px;margin-bottom:12px}.metric-head{display:flex;justify-content:space-between;gap:12px}.metric-name{font-size:10px;font-weight:600;letter-spacing:1.5px;color:var(--muted)}.metric-name::before{content:"";display:inline-block;width:7px;height:7px;border-radius:2px;background:var(--accent);margin-right:7px}.value{font-size:24px;letter-spacing:-.6px;margin-top:7px;line-height:1.1}.detail{font-size:11px;color:var(--muted);margin-top:5px;line-height:1.4}.metric-side{text-align:right;align-self:center;color:var(--accent);font-size:15px}.plot{height:99px;position:relative;margin-top:7px}canvas{display:block;width:100%;height:100%;touch-action:pan-y}.empty{position:absolute;inset:0;display:grid;place-items:center;color:var(--muted);font-size:11px;pointer-events:none;padding-left:28px}.empty[hidden]{display:none}footer{display:flex;justify-content:space-between;gap:12px;color:var(--muted);font-size:10px;line-height:1.6;margin-top:16px}.method{color:var(--muted);font-size:10px;line-height:1.6;margin:12px 2px 0}.tooltip{position:fixed;z-index:10;pointer-events:none;background:#0c1114f5;border:1px solid #465860;box-shadow:0 8px 32px #0006;border-radius:9px;padding:13px 15px;min-width:270px;font-size:12px;max-width:calc(100vw - 16px)}.tooltip[hidden]{display:none}.tip-time{font-weight:600;margin-bottom:10px}.tip-row{display:flex;justify-content:space-between;gap:18px;margin-top:8px}.tip-label{color:var(--muted)}.tip-note{font-size:10px;color:var(--muted);margin-top:4px;text-align:right}
+@media(max-width:560px){main{padding:18px 14px}.card{padding:14px 12px 6px}.status{gap:10px;font-size:11px}.model-row{align-items:flex-start}.ranges button{padding:7px 10px}.value{font-size:21px}.plot{height:112px}footer{flex-direction:column;gap:2px}.live{display:none}.tooltip{min-width:250px}}
+</style>
+</head>
+<body>
+<main>
+<header><div class="brand"><span class="mark" aria-hidden="true">⌁</span><div><h1>Ollama Monitor</h1><div class="eyebrow">LOCAL INFERENCE · SYSTEM TELEMETRY</div></div></div><span class="live" id="live">CONNECTING</span></header>
+<div class="status" aria-live="polite"><span>Collector<strong id="collector">CONNECTING</strong></span><span>Ollama<strong id="ollama">—</strong></span><span>Version<strong id="version">—</strong></span></div>
+<div class="model-row"><div><div class="model-name" id="model">Waiting for the monitoring service</div><div class="subtle" id="model-detail">A shared timeline for memory and context</div></div><div class="ranges" role="group" aria-label="History range"><button data-range="1m" aria-pressed="false">1m</button><button data-range="15m" aria-pressed="true">15m</button><button data-range="1h" aria-pressed="false">1h</button></div></div>
+<div class="banner" id="banner" role="status" hidden></div>
+<div id="charts"></div>
+<div class="method">System RAM includes anonymous, wired and compressed memory. Ollama RAM is process-tree RSS (an estimate). Pressure is 100 − system-wide free %, not Activity Monitor’s pressure indicator. Memory units: GiB (1024³ bytes).</div>
+<footer><span id="updated">Last update: —</span><span id="coverage">History stays with the monitoring service</span></footer>
+</main>
+<div class="tooltip" id="tooltip" hidden></div>
+<script>
+'use strict';
+const API_BASE = 'http://127.0.0.1:11436';
+const $ = id => document.getElementById(id);
+const finite = x => typeof x === 'number' && Number.isFinite(x);
+const fmt = (x, digits=1) => finite(x) ? x.toLocaleString(undefined,{minimumFractionDigits:digits,maximumFractionDigits:digits}) : '—';
+const pct = x => finite(x) ? fmt(x)+' %' : '—';
+const gib = x => finite(x) ? fmt(x/1024**3)+' GiB' : '—';
+const tokens = x => finite(x) ? Math.round(x).toLocaleString() : '—';
+const clock = x => new Date(x*1000).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+const metrics = [
+ {key:'system_ram_percent',name:'System RAM',axis:'RAM utilization %',color:'#64d7b0'},
+ {key:'ollama_ram_bytes',name:'Ollama RAM',axis:'Resident memory · GiB',color:'#b5a0ff'},
+ {key:'memory_pressure_percent',name:'Memory Pressure',axis:'Normalized pressure %',color:'#e8be72'},
+ {key:'context_percent',name:'Context',axis:'Context utilization %',color:'#75bdf5'}
+];
+let range='15m', history=null, selected=null, lastStatus=null, revision=0, controller=null, timer=null;
+const pending = new Map(); let rpcID=0, bridgeReady=null;
+function rpc(method,params={},timeout=3500){
+ return new Promise((resolve,reject)=>{
+  const id=++rpcID;
+  const timeoutID=setTimeout(()=>{pending.delete(id);reject(new Error('Goose bridge timeout'));},timeout);
+  pending.set(id,{resolve,reject,timeoutID});
+  window.parent.postMessage({jsonrpc:'2.0',id,method,params},'*');
+ });
+}
+window.addEventListener('message',event=>{
+ if(event.source!==window.parent || !event.data || event.data.jsonrpc!=='2.0')return;
+ const message=event.data, item=pending.get(message.id);
+ if(!item)return;
+ clearTimeout(item.timeoutID);pending.delete(message.id);
+ message.error ? item.reject(new Error(message.error.message)) : item.resolve(message.result);
+});
+if(window.parent!==window){
+ bridgeReady=rpc('ui/initialize',{appInfo:{name:'ollama-monitor',version:'0.1.0'},appCapabilities:{},protocolVersion:'2025-11-21'})
+ .then(()=>{window.parent.postMessage({jsonrpc:'2.0',method:'ui/notifications/initialized',params:{}},'*');return true;}).catch(()=>false);
+}
+for(const [i,m] of metrics.entries()){
+ const card=document.createElement('section');card.className='card';card.style.setProperty('--accent',m.color);
+ card.innerHTML=`<div class="metric-head"><div><div class="metric-name">${m.name}</div><div class="value" id="value-${i}">—</div><div class="detail" id="detail-${i}">Waiting for data</div></div><div class="metric-side" id="side-${i}"></div></div><div class="plot"><canvas tabindex="0" role="img" aria-label="${m.name} history. Use left and right arrows to inspect samples."></canvas><span class="empty">Waiting for samples</span></div>`;
+ $('charts').appendChild(card);m.canvas=card.querySelector('canvas');m.empty=card.querySelector('.empty');
+ m.canvas.addEventListener('pointermove',event=>{
+  if(!history?.samples.length)return;
+  const rect=m.canvas.getBoundingClientRect();
+  const fraction=Math.max(0,Math.min(1,(event.clientX-rect.left-42)/(rect.width-54)));
+  const target=history.start+fraction*(history.end-history.start);
+  selected=history.samples.reduce((best,s)=>Math.abs(s.timestamp-target)<Math.abs(best.timestamp-target)?s:best);
+  showTooltip(event.clientX,event.clientY);drawAll();
+ });
+ m.canvas.addEventListener('pointerleave',clearHover);
+ m.canvas.addEventListener('blur',clearHover);
+ m.canvas.addEventListener('keydown',event=>{
+  if(event.key==='Escape'){clearHover();return;}
+  if(!['ArrowLeft','ArrowRight'].includes(event.key)||!history?.samples.length)return;
+  event.preventDefault();const samples=history.samples;
+  let index=selected?samples.indexOf(selected):samples.length-1;
+  if(selected)index=Math.max(0,Math.min(samples.length-1,index+(event.key==='ArrowRight'?1:-1)));
+  selected=samples[index];const rect=m.canvas.getBoundingClientRect();showTooltip(rect.left+rect.width/2,rect.top);drawAll();
+ });
+}
+function clearHover(){selected=null;$('tooltip').hidden=true;drawAll();}
+function renderStatus(status){
+ lastStatus=status;
+ const stale=Date.now()/1000-status.timestamp>Math.max(10,status.collector.interval_seconds*3);
+ $('collector').textContent=stale?'STALE':'ONLINE';$('live').textContent=stale?'STALE':'LIVE';
+ $('live').style.color=stale?'var(--amber)':'var(--green)';
+ $('ollama').textContent=status.ollama.online?'ONLINE':'OFFLINE';$('version').textContent=status.ollama.version||'—';
+ $('model').textContent=status.models===null?'Model status unavailable':status.models.length?status.models.map(m=>m.name).join(' · '):status.ollama.online?'No model loaded':'Ollama is offline';
+ $('model-detail').textContent=status.models?.length>1?'Context shows one runner slot; independent windows are not summed':'Local Ollama · '+status.collector.interval_seconds+'s sampling';
+ const s=status.system_memory,o=status.ollama_memory,p=status.memory_pressure,c=status.context;
+ $('value-0').textContent=pct(s.used_percent);$('detail-0').textContent=gib(s.used_bytes)+' / '+gib(s.total_bytes);$('side-0').textContent='Swap '+gib(s.swap_used_bytes);
+ $('value-1').textContent=gib(o.used_bytes);$('detail-1').textContent=finite(o.process_count)?o.process_count+' Ollama processes · resident memory':'Process metrics unavailable';$('side-1').textContent=pct(o.used_percent_of_system_ram)+' of RAM';
+ $('value-2').textContent=pct(p.pressure_percent);$('detail-2').textContent='Derived from system-wide memory free';$('side-2').textContent=pct(p.free_percent)+' free';
+ $('value-3').textContent=pct(c.used_percent);$('detail-3').textContent=tokens(c.used_tokens)+' / '+tokens(c.max_tokens)+' tokens';$('side-3').textContent=c.source==='unavailable'?'Metric unavailable':(c.processing?'Processing · ':'')+(c.estimated?'Estimate':'Runner /slots');
+ $('detail-3').title=c.source+(c.runner_pid?' · PID '+c.runner_pid+' · slot '+c.slot:'');
+ $('updated').textContent='Last update: '+clock(status.timestamp);
+ $('banner').hidden=!stale;$('banner').textContent=stale?'Collector is not producing fresh samples. Current readings are stale.':'';
+ if(stale)clearValues('Stale measurement');
+}
+function clearValues(label){for(let i=0;i<4;i++){$('value-'+i).textContent='—';$('detail-'+i).textContent=label;$('side-'+i).textContent='';}}
+function unavailable(){
+ $('collector').textContent='UNAVAILABLE';$('live').textContent='OFFLINE';$('live').style.color='var(--amber)';
+ $('ollama').textContent='UNKNOWN';$('version').textContent='—';$('model').textContent='Monitoring backend unavailable';
+ $('banner').hidden=false;$('banner').textContent='Cannot reach the monitoring service at '+API_BASE+'. Start ollama-watch.py; reconnection is automatic.';
+ clearValues('No fresh measurement');
+ if(history){history.end=Date.now()/1000;history.start=history.end-({ '1m':60,'15m':900,'1h':3600 }[range]);}
+ drawAll();
+}
+function drawAll(){metrics.forEach(draw);}
+function draw(m){
+ const canvas=m.canvas,rect=canvas.getBoundingClientRect(),dpr=window.devicePixelRatio||1;
+ canvas.width=Math.max(1,Math.round(rect.width*dpr));canvas.height=Math.max(1,Math.round(rect.height*dpr));
+ const ctx=canvas.getContext('2d');ctx.scale(dpr,dpr);
+ const w=rect.width,h=rect.height,L=42,R=w-12,T=19,B=h-22;
+ const samples=history?.samples||[],bytes=m.key==='ollama_ram_bytes';
+ let maximum=bytes?Math.max(1,...samples.map(s=>finite(s[m.key])?s[m.key]/1024**3:0))*1.12:100;
+ if(bytes)maximum=Math.ceil(maximum);
+ const y=value=>B-Math.max(0,Math.min(maximum,bytes?value/1024**3:value))/maximum*(B-T);
+ const x=time=>L+(time-(history?.start||0))/((history?.end||1)-(history?.start||0))*(R-L);
+ ctx.font='9px -apple-system, sans-serif';ctx.fillStyle='#8999a3';ctx.fillText(m.axis,L,9);
+ for(const fraction of [0,.5,1]){
+  const yy=T+(B-T)*fraction;ctx.strokeStyle='#2b353c';ctx.lineWidth=.6;ctx.beginPath();ctx.moveTo(L,yy);ctx.lineTo(R,yy);ctx.stroke();
+  ctx.textAlign='right';ctx.fillText(fmt(maximum*(1-fraction),maximum<4?1:0),L-8,yy+3);
+ }
+ ctx.textAlign='left';
+ if(history){for(const fraction of [0,.5,1]){ctx.textAlign=fraction===0?'left':fraction===1?'right':'center';ctx.fillText(clock(history.start+fraction*(history.end-history.start)),L+fraction*(R-L),h-4);}}
+ const visible=samples.filter(s=>s.timestamp>=(history?.start||0)&&s.timestamp<=(history?.end||Infinity));
+ m.empty.hidden=visible.some(s=>finite(s[m.key]));
+ m.empty.textContent=samples.length?'No measurements in this range':'Waiting for samples';
+ ctx.save();ctx.beginPath();ctx.rect(L,T,R-L,B-T);ctx.clip();
+ ctx.strokeStyle=m.color;ctx.lineWidth=1.8;ctx.lineJoin='round';ctx.beginPath();
+ let previous=null;
+ for(const sample of visible){
+  const value=sample[m.key];
+  if(!finite(value)){previous=null;continue;}
+  const changed=m.key==='context_percent'&&previous&&(sample.context_runner_pid!==previous.context_runner_pid||sample.context_slot!==previous.context_slot||sample.context_model!==previous.context_model);
+  if(!previous||changed||sample.timestamp-previous.timestamp>(history.interval_seconds||2)*2.5)ctx.moveTo(x(sample.timestamp),y(value));
+  else ctx.lineTo(x(sample.timestamp),y(value));
+  previous=sample;
+ }
+ ctx.stroke();
+ // Dots also make an isolated observation (surrounded by nulls) visible.
+ ctx.fillStyle=m.color;
+ for(const s of visible)if(finite(s[m.key])){ctx.beginPath();ctx.arc(x(s.timestamp),y(s[m.key]),1.35,0,Math.PI*2);ctx.fill();}
+ if(selected){
+  ctx.strokeStyle='#becbd3';ctx.lineWidth=.8;ctx.setLineDash([3,3]);ctx.beginPath();ctx.moveTo(x(selected.timestamp),T);ctx.lineTo(x(selected.timestamp),B);ctx.stroke();ctx.setLineDash([]);
+  if(finite(selected[m.key])){ctx.fillStyle=m.color;ctx.beginPath();ctx.arc(x(selected.timestamp),y(selected[m.key]),3.2,0,Math.PI*2);ctx.fill();}
+ }
+ ctx.restore();
+}
+function showTooltip(clientX,clientY){
+ const s=selected,tip=$('tooltip');if(!s)return;tip.replaceChildren();
+ const time=document.createElement('div');time.className='tip-time';time.textContent=clock(s.timestamp);tip.appendChild(time);
+ const rows=[['System RAM',pct(s.system_ram_percent),gib(s.system_ram_bytes)+' / '+gib(s.system_total_bytes)],['Ollama RAM',gib(s.ollama_ram_bytes),pct(s.ollama_ram_percent)+' of system RAM'],['Memory Pressure',pct(s.memory_pressure_percent),'System-wide free: '+pct(s.memory_free_percent)],['Context',pct(s.context_percent),tokens(s.context_used_tokens)+' / '+tokens(s.context_max_tokens)+' tokens · '+s.context_source]];
+ for(const [name,value,note] of rows){const row=document.createElement('div');row.className='tip-row';const label=document.createElement('span');label.className='tip-label';label.textContent=name;const val=document.createElement('span');val.textContent=value;row.append(label,val);tip.append(row);const detail=document.createElement('div');detail.className='tip-note';detail.textContent=note;tip.append(detail);}
+ tip.hidden=false;const box=tip.getBoundingClientRect();tip.style.left=Math.max(8,Math.min(innerWidth-box.width-8,clientX+18))+'px';tip.style.top=Math.max(8,Math.min(innerHeight-box.height-8,clientY+14))+'px';
+}
+async function fetchJSON(path,signal){const response=await fetch(API_BASE+path,{signal,cache:'no-store',credentials:'omit'});if(!response.ok)throw new Error('HTTP '+response.status);return response.json();}
+async function poll(){
+ const currentRevision=revision,requestedRange=range;const requestController=new AbortController();controller=requestController;const signal=requestController.signal;
+ const timeout=setTimeout(()=>requestController.abort(),4500);
+ try{
+  let status,data;
+  try{[status,data]=await Promise.all([fetchJSON('/api/status',signal),fetchJSON('/api/history?range='+requestedRange,signal)]);}
+  catch(error){
+   if(currentRevision!==revision) return;
+   // Imported Goose apps can use the read-only MCP bridge if fetch is blocked by CSP.
+   if(!bridgeReady||!await bridgeReady)throw error;
+   const result=await rpc('tools/call',{name:'monitor_read',arguments:{range:requestedRange}});
+   if(result.isError)throw new Error('Backend unavailable');
+   const parsed=result.structuredContent||JSON.parse(result.content.find(c=>c.type==='text').text);
+   status=parsed.status;data=parsed.history;
+  }
+  if(currentRevision!==revision)return;
+  if(!status?.collector||data?.range!==requestedRange||!Array.isArray(data.samples))throw new Error('Invalid response');
+  history=data;renderStatus(status);
+  $('coverage').textContent=data.samples.length+' samples · '+range+' view · raw history';
+  if(selected){selected=data.samples.find(s=>s.timestamp===selected.timestamp)||null;if(!selected)$('tooltip').hidden=true;}
+  drawAll();
+ }catch(error){if(currentRevision===revision)unavailable();}
+ finally{clearTimeout(timeout);if(currentRevision===revision)timer=setTimeout(poll,2000);}
+}
+for(const button of document.querySelectorAll('[data-range]'))button.addEventListener('click',()=>{
+ if(range===button.dataset.range)return;
+ range=button.dataset.range;revision++;clearTimeout(timer);controller?.abort();history=null;clearHover();
+ for(const other of document.querySelectorAll('[data-range]'))other.setAttribute('aria-pressed',String(other===button));
+ poll();
+});
+new ResizeObserver(drawAll).observe($('charts'));
+poll();
+</script>
+</body>
+</html>
