@@ -15,7 +15,9 @@ def dispatch(method, params, port):
     if method == "initialize":
         return {"protocolVersion": params.get("protocolVersion", "2025-06-18"),
                 "capabilities": {"resources": {}, "tools": {}},
-                "serverInfo": {"name": "ollama-monitor", "version": "0.1.0"}}
+                "serverInfo": {"name": "ollama-monitor", "version": "0.2.0"},
+                "instructions": "Call open_monitor to display the Ollama Monitor MCP App. "
+                                "The app reads metrics through monitor_read; no shell commands are needed."}
     if method == "ping":
         return {}
     if method == "resources/list":
@@ -35,16 +37,30 @@ def dispatch(method, params, port):
                                "range": {"type": "string", "enum": ["1m", "15m", "1h"]}},
                                "additionalProperties": False},
                            "annotations": {"readOnlyHint": True, "openWorldHint": False},
-                           "_meta": {"ui": {"resourceUri": URI}}}]}
+                           "_meta": {"ui": {"resourceUri": URI, "visibility": ["app"]}}},
+                          {"name": "open_monitor", "title": "Open Ollama Monitor",
+                           "description": "Open the interactive Ollama Monitor app with four memory/context charts. "
+                                          "Use this when the user asks to open or show the Ollama monitoring dashboard.",
+                           "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
+                           "annotations": {"readOnlyHint": True, "destructiveHint": False,
+                                           "idempotentHint": True, "openWorldHint": False},
+                           "_meta": {"ui": {"resourceUri": URI, "visibility": ["model", "app"]}}}]}
     if method == "tools/call":
         arguments = params.get("arguments") or {}
+        if params.get("name") == "open_monitor":
+            if arguments:
+                raise ValueError("open_monitor takes no arguments")
+            # The host resolves this resource via resources/read. The app can
+            # render its reconnect state even when the monitoring service is down.
+            return {"content": [{"type": "text", "text": "Ollama Monitor dashboard"}],
+                    "_meta": {"ui": {"resourceUri": URI}}}
         range_name = arguments.get("range", "15m")
         if params.get("name") != "monitor_read" or range_name not in {"1m", "15m", "1h"}:
             raise ValueError("Unknown tool or range")
         status = http_json(origin + "/api/status", timeout=2)
         history = http_json(origin + "/api/history?range=" + range_name, timeout=2)
         if not status or not history:
-            return {"isError": True, "content": [{"type": "text", "text": "Monitoring backend unavailable"}]}
+            return {"isError": True, "content": [{"type": "text", "text": f"No data from {origin}. Check the monitoring service."}]}
         data = {"status": status, "history": history}
         return {"content": [{"type": "text", "text": json.dumps(data)}], "structuredContent": data}
     raise LookupError("Method not found")

@@ -18,7 +18,7 @@ CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
 
 
 class Browser:
-    def __init__(self):
+    def __init__(self, executable=CHROME, env=None, existing_page=False):
         self.profile = tempfile.TemporaryDirectory(prefix='ollama-monitor-chrome-')
         child_in, self.writer = os.pipe()
         self.reader, child_out = os.pipe()
@@ -29,18 +29,32 @@ class Browser:
         def setup():
             os.dup2(child_in_copy, 3)
             os.dup2(child_out_copy, 4)
-        self.process = subprocess.Popen([CHROME, '--headless=new', '--no-first-run',
+        self.process = subprocess.Popen([executable, '--headless=new', '--no-first-run',
             '--no-default-browser-check', '--disable-background-networking',
             '--remote-debugging-pipe', '--user-data-dir='+self.profile.name, 'about:blank'],
-            preexec_fn=setup, close_fds=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            preexec_fn=setup, close_fds=False, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         for fd in [child_in, child_out, child_in_copy, child_out_copy]: os.close(fd)
         self.buffer = b''
         self.counter = 0
         self.errors = []
-        target = self.call('Target.createTarget', {'url':'about:blank'})['targetId']
-        self.session = self.call('Target.attachToTarget', {'targetId':target,'flatten':True})['sessionId']
-        self.call('Runtime.enable', session=True)
-        self.call('Page.enable', session=True)
+        try:
+            if existing_page:
+                target = None
+                for _ in range(100):
+                    pages = [t for t in self.call('Target.getTargets')['targetInfos']
+                             if t['type']=='page' and 'index.html' in t['url']]
+                    if pages:
+                        target = pages[0]['targetId']; break
+                    time.sleep(.1)
+                if not target: raise RuntimeError('No application page')
+            else:
+                target = self.call('Target.createTarget', {'url':'about:blank'})['targetId']
+            self.session = self.call('Target.attachToTarget', {'targetId':target,'flatten':True})['sessionId']
+            self.call('Runtime.enable', session=True)
+            self.call('Page.enable', session=True)
+        except Exception:
+            self.close()
+            raise
 
     def call(self, method, params=None, session=False):
         self.counter += 1
@@ -130,24 +144,41 @@ def main():
         app = (Path(__file__).resolve().parents[1] / 'app/ollama-monitor.html').read_text()
         app = app.replace('<head>', '''<head><meta http-equiv="Content-Security-Policy"
             content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'none'">''')
-        app += '''<script>setInterval(()=>parent.postMessage({probe:document.getElementById('collector').textContent},'*'),100)</script>'''
-        host = '''<div id="probe"></div><script>window.toolCalls=0;
+        app += '''<script>setInterval(()=>parent.postMessage({probe:document.getElementById('collector').textContent,banner:document.getElementById('banner').textContent},'*'),100)</script>'''
+        host = '''<div id="probe"></div><div id="diagnostic"></div><script>window.toolCalls=0;window.initCalls=0;window.backendDown=false;
         const readings=READINGS;
         addEventListener('message',event=>{
           const m=event.data;
-          if(m.probe){document.getElementById('probe').textContent=m.probe;return;}
-          if(!m.id)return;
+          if(m.probe){document.getElementById('probe').textContent=m.probe;document.getElementById('diagnostic').textContent=m.banner;return;}
+          if(!m.id||!m.method)return;
           let result={};
-          if(m.method==='ui/initialize')result={protocolVersion:'2025-11-21',hostInfo:{name:'test',version:'1'},hostCapabilities:{},hostContext:{}};
-          if(m.method==='tools/call'){window.toolCalls++;result={structuredContent:readings,content:[]};}
-          event.source.postMessage({jsonrpc:'2.0',id:m.id,result},'*');
+          if(m.method==='ui/initialize'){
+            window.initCalls++;
+            if(window.initCalls===1){event.source.postMessage({jsonrpc:'2.0',id:m.id,error:{code:-32000,message:'Session still starting'}},'*');return;}
+            result={protocolVersion:'2025-11-21',hostInfo:{name:'test',version:'1'},hostCapabilities:{},hostContext:{}};
+          }
+          if(m.method==='tools/call'){
+            window.toolCalls++;readings.status.timestamp=Date.now()/1000;
+            result=window.backendDown?{isError:true,content:[{type:'text',text:'Test backend offline'}]}:{structuredContent:readings,content:[]};
+          }
+          // Request and response IDs are independent in each direction.
+          event.source.postMessage({jsonrpc:'2.0',id:m.id,method:'ping'},'*');
+          setTimeout(()=>event.source.postMessage({jsonrpc:'2.0',id:m.id,result},'*'),100);
         });</script>'''.replace('READINGS', json.dumps({'status':status,'history':data}))
         host += '<iframe sandbox="allow-scripts" srcdoc="'+html.escape(app, quote=True)+'"></iframe>'
         browser.call('Page.navigate', {'url':'about:blank'}, session=True)
         frame = browser.call('Page.getFrameTree', session=True)['frameTree']['frame']['id']
         browser.call('Page.setDocumentContent', {'frameId':frame,'html':host}, session=True)
+        browser.wait_for("document.getElementById('probe')?.textContent==='UNAVAILABLE'")
+        assert 'Goose bridge: Session still starting' in browser.js("document.getElementById('diagnostic').textContent")
         browser.wait_for("document.getElementById('probe')?.textContent==='ONLINE'")
+        assert browser.js('window.initCalls >= 2')
         assert browser.js('window.toolCalls > 0')
+        browser.js('window.backendDown=true')
+        browser.wait_for("document.getElementById('probe')?.textContent==='UNAVAILABLE'")
+        assert 'Monitoring backend: Test backend offline' in browser.js("document.getElementById('diagnostic').textContent")
+        browser.js('window.backendDown=false')
+        browser.wait_for("document.getElementById('probe')?.textContent==='ONLINE'")
         assert not browser.errors, browser.errors
         print('PASS: real API, four charts, ranges, keyboard hover, offline/reconnect, 1801-point gaps, narrow layout, Goose sandbox bridge, no JS exceptions')
         print('Screenshots: /tmp/ollama-monitor-live.png; /tmp/ollama-monitor-narrow-fixture.png (synthetic history)')

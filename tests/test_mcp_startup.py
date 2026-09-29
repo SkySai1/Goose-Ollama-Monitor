@@ -51,6 +51,13 @@ class McpStartupTests(unittest.TestCase):
                 result = self.exchange(process, {"jsonrpc": "2.0", "id": 3, "method": "resources/list"})
                 self.assertEqual(result["resources"][0]["uri"], "ui://ollama-monitor/dashboard")
                 self.exchange(process, {"jsonrpc": "2.0", "id": 4, "method": "ping"})
+                result = self.exchange(process, {"jsonrpc": "2.0", "id": 5, "method": "tools/call",
+                                                "params": {"name": "open_monitor", "arguments": {}}})
+                self.assertEqual(result["_meta"]["ui"]["resourceUri"], "ui://ollama-monitor/dashboard")
+                result = self.exchange(process, {"jsonrpc": "2.0", "id": 6, "method": "resources/read",
+                                                "params": {"uri": "ui://ollama-monitor/dashboard"}})
+                self.assertIn("ensureBridge", result["contents"][0]["text"])
+                self.assertTrue(result["contents"][0]["_meta"]["window"]["resizable"])
                 process.stdin.close()
                 self.assertEqual(process.wait(timeout=3), 0)
                 self.assertEqual(process.stderr.read(), b"")

@@ -1,0 +1,19 @@
+# Merge this entry into extensions in ~/.config/goose/config.yaml.
+# These absolute paths match this workstation; adjust when moving the project.
+extensions:
+  ollamamonitor:
+    enabled: true
+    type: stdio
+    name: Ollama Monitor
+    description: Open Ollama Monitor via open_monitor; read metrics through MCP Apps.
+    cmd: /opt/homebrew/bin/python3
+    args:
+      - /Users/sky/Development/GooseAppOllamaWatch/ollama-monitor-mcp.py
+      - --port
+      - '11436'
+    envs:
+      PYTHONUNBUFFERED: '1'
+    env_keys: []
+    timeout: 15
+    cwd: /Users/sky/Development/GooseAppOllamaWatch
+    bundled: null

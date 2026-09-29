@@ -35,29 +35,36 @@ echo $! > /tmp/ollama-monitor.pid
 
 Остановка: `kill "$(cat /tmp/ollama-monitor.pid)"`. При обычном запуске — Ctrl+C. Проверяйте, что PID-файл относится к всё ещё работающему процессу, если система перезапускалась.
 
-## Goose App
+## Goose App через MCP
 
-Для сетевого доступа в sandbox Goose используется небольшой **stdio MCP extension**. Он возвращает HTML, metadata окна и read-only инструмент чтения API. Он не собирает метрики и не запускает monitoring service; закрытие Goose не влияет на историю.
+Готовая настройка этой рабочей станции: [`goose-extension.yaml`](goose-extension.yaml). Это запись для раздела `extensions` в `~/.config/goose/config.yaml`; остальные расширения сохраняются. На другом компьютере замените абсолютные пути к Python и проекту.
 
-1. Запустите monitoring service командой выше.
-2. В Goose откройте **Extensions → Add custom extension**, выберите **Standard IO**.
-3. Укажите имя `ollama-monitor` и команду (с абсолютными путями):
+1. Запустите `python3 ollama-watch.py --server`. Collector работает отдельно от Goose и сохраняет историю при закрытии окна.
+2. Включите stdio extension **Ollama Monitor** (ключ `ollamamonitor`). Команда:
 
    ```text
-   /absolute/path/to/python3 /absolute/path/to/GooseAppOllamaWatch/ollama-monitor-mcp.py
+   /opt/homebrew/bin/python3 /Users/sky/Development/GooseAppOllamaWatch/ollama-monitor-mcp.py --port 11436
    ```
 
-   Путь к Python можно узнать через `command -v python3`. Если форма разделяет executable и arguments: executable — Python, единственный argument — абсолютный путь к `ollama-monitor-mcp.py`. Этот entry point всегда запускает MCP и сразу отвечает на `initialize`, даже если monitoring service выключен.
-4. Включите extension, откройте **Apps → Ollama Monitor → Launch**. Если ресурс ещё не появился, откройте новую сессию с включённым extension, затем Apps. Альтернатива: попросите Goose вызвать read-only `monitor_read`.
-5. Окно 880 × 940 изменяет размер и прокручивается при небольшой высоте.
+   Если UI разделяет поля: executable — `/opt/homebrew/bin/python3`, arguments — абсолютный путь к `ollama-monitor-mcp.py`, `--port`, `11436`. Запуск `ollama-watch.py` без `--mcp` в качестве extension некорректен: HTTP-сервис не отвечает на MCP initialize.
+3. После обновления команды/кода выключите и включите extension, затем откройте новую сессию Goose.
+4. Напишите Goose: **«Вызови open_monitor расширения Ollama Monitor и покажи приложение»**. Полное имя инструмента внутри Goose — `ollamamonitor__open_monitor`, аргументы `{}`.
 
-Если backend использует другой порт, добавьте такой же `--port 11437` в команду MCP extension. HTML и CSP будут сформированы для этого порта автоматически.
+Вызов MCP `tools/call`:
 
-**Если включение extension зависает:** проверьте executable и arguments. Запуск `ollama-watch.py` без `--mcp` включает HTTP-сервис, который не отвечает на MCP handshake. Goose тогда ждёт ответа до своего timeout. Используйте отдельный `ollama-monitor-mcp.py`; прежняя команда `ollama-watch.py --mcp` также поддерживается. После изменения команды выключите и снова включите extension; если текущая операция включения ещё ожидает ответа, перезапустите Goose. Для отображения метрик отдельно запустите `python3 ollama-watch.py --server`.
+```json
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"open_monitor","arguments":{}}}
+```
 
-`app/ollama-monitor.html` также содержит GooseApp JSON-LD и подходит для **Apps → Import App**. При этом extension `ollama-monitor` должен оставаться включённым: в версиях Goose, не сохраняющих CSP при импорте HTML, приложение использует `tools/call` через MCP Apps bridge. Самостоятельный MCP resource предпочтительнее импорта, поскольку явно указывает `connectDomains`. Изменять исходный код или ослаблять безопасность Goose не требуется.
+`open_monitor` возвращает `_meta.ui.resourceUri = ui://ollama-monitor/dashboard`. Goose загружает HTML через `resources/read`. Metadata ресурса задаёт MIME `text/html;profile=mcp-app`, CSP `connectDomains` для выбранного localhost-порта и `window: {width: 880, height: 940, resizable: true}`. В зависимости от места вызова Goose показывает интерактивное приложение в чате; для отдельного окна используйте **Apps → Ollama Monitor → Launch**. HTML импортировать вручную не требуется.
 
-Формат интеграции основан на [Goose Apps](https://goose-docs.ai/docs/mcp/apps-mcp/), [MCP Apps в Goose](https://goose-docs.ai/docs/tutorials/building-mcp-apps/) и [исходном формате GooseApp](https://github.com/aaif-goose/goose/blob/main/crates/goose/src/goose_apps/app.rs). Для встроенного MCP Apps bridge установленной версии Goose используется protocol `2025-11-21`.
+В окне Goose метрики читаются через MCP Apps bridge → `monitor_read` → локальный HTTP API. `monitor_read` помечен `visibility: ["app"]`, чтобы регулярный polling не засорял общение с моделью. `open_monitor` доступен модели. Оба инструмента read-only; открытие приложения не требует работающего backend, а недоступные метрики отображаются как ошибка соединения с автоматическим восстановлением.
+
+Handshake bridge повторяется после ошибки; таймаут одного RPC — 8 секунд. В обычном браузере интерфейс использует прямой HTTP. В Goose прямой запрос может блокироваться sandbox даже при работающем backend, поэтому он используется лишь как резервный путь. Ошибки bridge, HTTP и backend отображаются отдельно. Отключать CSP или расширять CORS для удалённых сайтов не требуется.
+
+Если backend использует другой порт, укажите тот же `--port` в команде MCP extension. После обновления HTML закройте старое окно монитора и откройте приложение заново, чтобы Goose запросил свежий resource.
+
+Формат основан на [Goose MCP Apps](https://goose-docs.ai/docs/tutorials/building-mcp-apps/) и [формате GooseApp](https://github.com/aaif-goose/goose/blob/main/crates/goose/src/goose_apps/app.rs). Для установленного MCP Apps bridge используется protocol `2025-11-21`.
 
 ## Что именно измеряется
 
@@ -127,4 +134,12 @@ python3 tests/browser_smoke.py
 
 Тест использует временный профиль, проверяет диапазоны, синхронный tooltip, offline/reconnect, 1801 точку с разрывами, узкое окно и ошибки JavaScript. Скриншоты сохраняются в `/tmp/ollama-monitor-live.png` и `/tmp/ollama-monitor-narrow-fixture.png`; второй использует синтетическую историю только в тестовой странице.
 
-Проверено на целевой macOS с Ollama 0.34.4 без загруженной модели. Активная генерация, несколько runner и offline/restart покрыты fixtures; загрузка модели автоматически не инициируется. MCP contract и формат Goose проверены, непосредственный запуск окна через UI Goose требует добавления extension описанным выше способом.
+Проверено на целевой macOS с Ollama 0.34.4 без загруженной модели. Активная генерация, несколько runner и offline/restart покрыты fixtures; загрузка модели автоматически не инициируется. Проверен установленный Goose: вызов open_monitor через его MCP-клиент, обнаружение ресурса, отдельное окно, ONLINE через bridge и переключение диапазонов.
+
+Интеграционная проверка установленного Goose в отдельном временном профиле (не отправляет LLM prompts и не изменяет пользовательские беседы):
+
+```bash
+python3 tests/goose_smoke.py
+```
+
+Она вызывает `open_monitor` через MCP-клиент Goose, проверяет metadata ресурса/окна, открывает приложение, проверяет `ONLINE` и диапазоны. Скриншот: `/tmp/ollama-monitor-goose.png`. Используется renderer SDK установленной Goose 1.52; при обновлении внутреннего SDK тесту может потребоваться адаптация, runtime приложения от него не зависит.

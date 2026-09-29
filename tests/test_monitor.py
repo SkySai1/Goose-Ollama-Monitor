@@ -267,6 +267,17 @@ class ApiTests(unittest.TestCase):
         result = dispatch('tools/call', {'name':'monitor_read','arguments':{'range':'1m'}}, self.server.server_port)
         self.assertEqual(result['structuredContent']['history']['range'], '1m')
 
+    def test_open_app_metadata_and_visibility_without_backend(self):
+        tools = {tool['name']: tool for tool in dispatch('tools/list', {}, 11436)['tools']}
+        self.assertEqual(tools['monitor_read']['_meta']['ui']['visibility'], ['app'])
+        self.assertIn('model', tools['open_monitor']['_meta']['ui']['visibility'])
+        with patch('ollama_monitor.mcp.http_json', side_effect=AssertionError('Must not fetch during open')):
+            result = dispatch('tools/call', {'name':'open_monitor','arguments':{}}, 11436)
+        self.assertEqual(result['_meta']['ui']['resourceUri'], URI)
+        resource = dispatch('resources/read', {'uri':URI}, 11437)['contents'][0]
+        self.assertIn('http://127.0.0.1:11437', resource['text'])
+        self.assertEqual(resource['_meta']['window'], {'width':880, 'height':940, 'resizable':True})
+
 
 if __name__ == '__main__':
     unittest.main()
